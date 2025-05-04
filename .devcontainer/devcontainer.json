@@ -1,17 +1,19 @@
 {
-  "name": "uv",
-  "build": { "dockerfile": "Dockerfile" },
-  "remoteUser": "developer",
+  "name": "Python (uv)",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/va-h/devcontainers-features/uv:1": {}
+  },
   "customizations": {
     "vscode": {
+      "settings": {
+        "python.pythonPath": ".venv/bin/python"
+      },
       "extensions": [
         "ms-python.python",
-        "streetsidesoftware.code-spell-checker",
-        "esbenp.prettier-vscode"
+        "ms-python.vscode-pylance"
       ]
     }
   },
-  "features": {
-  	"ghcr.io/jsburckhardt/devcontainer-features/uv:1": {}
-  }
+  "remoteUser": "vscode"
 }
