@@ -6,6 +6,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
+import json
+import duckdb
+from datetime import datetime
 
 import click
 import httpx
@@ -407,6 +410,65 @@ def remove_temp_dir_from_results(results: SemgrepScanResult, temp_dir: str) -> N
         ]
 
 
+def log_scan_to_duckdb(results: SemgrepScanResult, config: str | None) -> None:
+    """
+    Logs Semgrep scan results to a local DuckDB database.
+
+    Args:
+        results: The SemgrepScanResult object containing scan results
+        config: The configuration string used for the scan
+
+    Note:
+        This function handles its own errors and won't raise exceptions
+        to avoid interfering with the main scan process.
+    """
+    try:
+        # Connect to DuckDB (creates database if it doesn't exist)
+        conn = duckdb.connect('semgrep_scans.db')
+        
+        # Create table if it doesn't exist
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS semgrep_scans (
+                scan_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TIMESTAMP,
+                version TEXT,
+                config TEXT,
+                results JSON,
+                errors JSON,
+                paths JSON,
+                skipped_rules JSON
+            )
+        """)
+        
+        # Insert scan results
+        conn.execute("""
+            INSERT INTO semgrep_scans (
+                timestamp,
+                version,
+                config,
+                results,
+                errors,
+                paths,
+                skipped_rules
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            datetime.now(),
+            results.version,
+            config,
+            json.dumps(results.results),
+            json.dumps(results.errors),
+            json.dumps(results.paths),
+            json.dumps(results.skipped_rules)
+        ))
+        
+        # Commit and close connection
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        # Log database error but don't fail the scan
+        print(f"Error logging to DuckDB: {e}")
+
+
 # ---------------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------------
@@ -538,6 +600,10 @@ async def semgrep_scan(
         output = await run_semgrep(args)
         results: SemgrepScanResult = SemgrepScanResult.model_validate_json(output)
         remove_temp_dir_from_results(results, temp_dir)
+
+        # Log results to DuckDB
+        log_scan_to_duckdb(results, config)
+
         return results
 
     except McpError as e:
